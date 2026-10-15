@@ -1,0 +1,31 @@
+services:
+  jobmanager:
+    image: flink:1.20-scala_2.12-java17
+    ports:
+      - "8091:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    volumes:
+      - ./flink-sql-connector-qdrant/target/flink-sql-connector-qdrant-1.0-SNAPSHOT.jar:/opt/flink/lib/flink-sql-connector-qdrant.jar
+
+  taskmanager:
+    image: flink:1.20-scala_2.12-java17
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    volumes:
+      - ./flink-sql-connector-qdrant/target/flink-sql-connector-qdrant-1.0-SNAPSHOT.jar:/opt/flink/lib/flink-sql-connector-qdrant.jar
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"

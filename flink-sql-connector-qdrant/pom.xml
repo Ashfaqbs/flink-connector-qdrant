@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.ashfaqbs</groupId>
+        <artifactId>flink-connector-qdrant-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>flink-sql-connector-qdrant</artifactId>
+    <name>Flink SQL Connector Qdrant</name>
+    <description>
+        Shaded, dependency-bundled jar for dropping into Flink's lib/ or SQL client's
+        extra-jars, so the qdrant connector/client/gRPC dependencies don't need to be
+        provided separately.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.ashfaqbs</groupId>
+            <artifactId>flink-connector-qdrant</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.apache.flink:*</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <!-- Without this, the shade plugin keeps only one jar's copy of
+                                 each META-INF/services/io.grpc.* file instead of merging them,
+                                 so gRPC's NameResolverProvider registry ends up missing the
+                                 "dns" resolver and a stray "unix" one wins by load order,
+                                 breaking every plain host:port target at runtime. -->
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
