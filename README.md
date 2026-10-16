@@ -1,5 +1,7 @@
 # flink-connector-qdrant
 
+[![CI](https://github.com/Ashfaqbs/flink-connector-qdrant/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashfaqbs/flink-connector-qdrant/actions/workflows/ci.yml)
+
 **Write Apache Flink SQL results straight into [Qdrant](https://qdrant.tech) — no custom
 `DataStream` job, no hand-rolled client plumbing.**
 
