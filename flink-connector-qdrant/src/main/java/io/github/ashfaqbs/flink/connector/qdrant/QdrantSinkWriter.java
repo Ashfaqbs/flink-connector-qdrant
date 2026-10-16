@@ -12,8 +12,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Buffers incoming rows and upserts them to Qdrant in batches, flushing on batch-size, on a timer,
- * or when Flink asks for a final flush (checkpoint / end of input).
+ * Buffers incoming rows and upserts them to Qdrant in batches, flushing on batch-size, when the
+ * flush interval has elapsed by the time the next row arrives (checked opportunistically in
+ * {@link #write}, not on a background timer -- a quiet stream with checkpointing disabled can
+ * leave a partial batch unflushed), or when Flink asks for a final flush (checkpoint / end of
+ * input).
  *
  * <p>Upserts are by point ID, so retries after a transient failure are safe to redo in full — a
  * retried batch just overwrites the same points again.
@@ -59,8 +62,11 @@ public final class QdrantSinkWriter implements SinkWriter<RowData> {
 
     @Override
     public void close() {
-        flushBuffer();
-        client.close();
+        try {
+            flushBuffer();
+        } finally {
+            client.close();
+        }
     }
 
     private void flushBuffer() {
@@ -99,7 +105,20 @@ public final class QdrantSinkWriter implements SinkWriter<RowData> {
                         options.maxRetries(),
                         batch.size(),
                         e);
+                backoffBeforeRetry(attempt);
             }
+        }
+    }
+
+    private static void backoffBeforeRetry(int attempt) {
+        // Exponential backoff (200ms, 400ms, 800ms, ...) capped at 5s, so a struggling Qdrant
+        // instance isn't hammered with immediate retries during the exact window it's failing.
+        long delayMs = Math.min(200L * (1L << Math.min(attempt, 10)), 5000L);
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while backing off before an upsert retry", e);
         }
     }
 }

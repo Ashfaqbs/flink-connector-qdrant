@@ -48,9 +48,11 @@ public final class QdrantConnectorOptions {
                     .stringType()
                     .noDefaultValue()
                     .withDescription(
-                            "Name of the STRING or BIGINT column to use as the Qdrant point ID. "
-                                    + "If unset, a random UUID is generated per row (upserts will "
-                                    + "never match an existing point).");
+                            "Name of the STRING, INTEGER, or BIGINT column to use as the Qdrant "
+                                    + "point ID. A STRING id-field must contain a UUID (e.g. "
+                                    + "'5c56c793-69f3-4fbf-87e6-c4bf54c28c26'), not an arbitrary "
+                                    + "string. If unset, a random UUID is generated per row "
+                                    + "(upserts will never match an existing point).");
 
     public static final ConfigOption<Integer> SINK_BATCH_SIZE =
             ConfigOptions.key("sink.batch-size")

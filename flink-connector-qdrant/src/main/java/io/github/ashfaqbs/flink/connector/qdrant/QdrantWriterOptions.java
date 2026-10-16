@@ -31,6 +31,17 @@ public final class QdrantWriterOptions implements Serializable {
         this.useTls = useTls;
         this.apiKey = apiKey;
         this.collectionName = Objects.requireNonNull(collectionName, "collectionName");
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("sink.batch-size must be positive, got " + batchSize);
+        }
+        if (flushIntervalMs < 0) {
+            throw new IllegalArgumentException(
+                    "sink.flush-interval-ms must not be negative, got " + flushIntervalMs);
+        }
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException(
+                    "sink.max-retries must not be negative, got " + maxRetries);
+        }
         this.batchSize = batchSize;
         this.flushIntervalMs = flushIntervalMs;
         this.maxRetries = maxRetries;

@@ -42,6 +42,16 @@ public final class QdrantRowConverter implements Serializable {
                         "id-field '" + idField + "' not found in schema: " + names);
             }
             this.idFieldTypeRoot = rowType.getTypeAt(idFieldIndex).getTypeRoot();
+            if (!isSupportedIdType(idFieldTypeRoot)) {
+                throw new IllegalArgumentException(
+                        "id-field '"
+                                + idField
+                                + "' has unsupported type "
+                                + rowType.getTypeAt(idFieldIndex)
+                                + ". Supported id-field types: STRING/VARCHAR (must contain a "
+                                + "UUID, e.g. '5c56c793-69f3-4fbf-87e6-c4bf54c28c26'), BIGINT, "
+                                + "INTEGER.");
+            }
         } else {
             this.idFieldIndex = -1;
             this.idFieldTypeRoot = null;
@@ -67,6 +77,13 @@ public final class QdrantRowConverter implements Serializable {
         }
     }
 
+    private static boolean isSupportedIdType(LogicalTypeRoot root) {
+        return root == LogicalTypeRoot.VARCHAR
+                || root == LogicalTypeRoot.CHAR
+                || root == LogicalTypeRoot.BIGINT
+                || root == LogicalTypeRoot.INTEGER;
+    }
+
     private static boolean isSupportedPayloadType(LogicalTypeRoot root) {
         switch (root) {
             case BOOLEAN:
@@ -85,6 +102,12 @@ public final class QdrantRowConverter implements Serializable {
     }
 
     public PointStruct toPoint(RowData row) {
+        if (row.isNullAt(vectorFieldIndex)) {
+            throw new IllegalStateException(
+                    "vector-field is null for a row -- the vector column is mandatory and has "
+                            + "no sensible default. Filter out null-vector rows upstream of "
+                            + "this sink.");
+        }
         PointStruct.Builder builder =
                 PointStruct.newBuilder()
                         .setId(resolveId(row))
@@ -106,12 +129,25 @@ public final class QdrantRowConverter implements Serializable {
         if (row.isNullAt(idFieldIndex)) {
             return id(UUID.randomUUID());
         }
-        if (idFieldTypeRoot == LogicalTypeRoot.BIGINT || idFieldTypeRoot == LogicalTypeRoot.INTEGER) {
+        if (idFieldTypeRoot == LogicalTypeRoot.BIGINT) {
             return id(row.getLong(idFieldIndex));
+        }
+        if (idFieldTypeRoot == LogicalTypeRoot.INTEGER) {
+            return id((long) row.getInt(idFieldIndex));
         }
         // VARCHAR/CHAR: Qdrant point IDs must be an unsigned integer or a UUID string.
         String raw = row.getString(idFieldIndex).toString();
-        return id(UUID.fromString(raw));
+        try {
+            return id(UUID.fromString(raw));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "id-field value '"
+                            + raw
+                            + "' is not a valid UUID. Qdrant point IDs from a STRING column "
+                            + "must be formatted as a UUID, e.g. "
+                            + "'5c56c793-69f3-4fbf-87e6-c4bf54c28c26'.",
+                    e);
+        }
     }
 
     private static float[] toFloatArray(ArrayData array) {

@@ -9,7 +9,9 @@ import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.junit.jupiter.api.Test;
@@ -81,5 +83,83 @@ class QdrantRowConverterTest {
         assertThatThrownBy(() -> new QdrantRowConverter(withArrayPayload, "embedding", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nested");
+    }
+
+    @Test
+    void bigintIdFieldIsUsedDirectlyAsNumericId() {
+        RowType schema =
+                RowType.of(
+                        new org.apache.flink.table.types.logical.LogicalType[] {
+                            new BigIntType(), new ArrayType(new FloatType())
+                        },
+                        new String[] {"id", "embedding"});
+        QdrantRowConverter converter = new QdrantRowConverter(schema, "embedding", "id");
+
+        PointStruct point =
+                converter.toPoint(
+                        GenericRowData.of(42L, new GenericArrayData(new float[] {0.1f})));
+
+        assertThat(point.getId().getNum()).isEqualTo(42L);
+    }
+
+    @Test
+    void integerIdFieldIsWidenedToLongWithoutClassCastException() {
+        RowType schema =
+                RowType.of(
+                        new org.apache.flink.table.types.logical.LogicalType[] {
+                            new IntType(), new ArrayType(new FloatType())
+                        },
+                        new String[] {"id", "embedding"});
+        QdrantRowConverter converter = new QdrantRowConverter(schema, "embedding", "id");
+
+        PointStruct point =
+                converter.toPoint(
+                        GenericRowData.of(7, new GenericArrayData(new float[] {0.1f})));
+
+        assertThat(point.getId().getNum()).isEqualTo(7L);
+    }
+
+    @Test
+    void rejectsUnsupportedIdFieldType() {
+        RowType schema =
+                RowType.of(
+                        new org.apache.flink.table.types.logical.LogicalType[] {
+                            new DoubleType(), new ArrayType(new FloatType())
+                        },
+                        new String[] {"id", "embedding"});
+
+        assertThatThrownBy(() -> new QdrantRowConverter(schema, "embedding", "id"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("id");
+    }
+
+    @Test
+    void rejectsInvalidUuidStringWithClearMessage() {
+        QdrantRowConverter converter = new QdrantRowConverter(schema(), "embedding", "id");
+        GenericRowData row =
+                GenericRowData.of(
+                        StringData.fromString("not-a-uuid"),
+                        new GenericArrayData(new float[] {0.1f}),
+                        StringData.fromString("x"),
+                        1L);
+
+        assertThatThrownBy(() -> converter.toPoint(row))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not-a-uuid")
+                .hasMessageContaining("UUID");
+    }
+
+    @Test
+    void rejectsNullVectorWithClearMessage() {
+        QdrantRowConverter converter = new QdrantRowConverter(schema(), "embedding", null);
+        GenericRowData row = new GenericRowData(4);
+        row.setField(0, StringData.fromString("ignored"));
+        row.setField(1, null);
+        row.setField(2, StringData.fromString("x"));
+        row.setField(3, 1L);
+
+        assertThatThrownBy(() -> converter.toPoint(row))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("vector-field is null");
     }
 }
