@@ -25,11 +25,9 @@ License: Apache 2.0 · Targets Flink **1.20 (LTS)** · Status: **v1, sink-only**
 Flink increasingly sits in front of RAG and embedding pipelines — compute an embedding, write it
 somewhere a vector search can find it. Qdrant is one of the most widely used vector databases, and
 as of this writing there is no official Flink connector for it, and no well-known community one
-either. That's the same kind of gap ClickHouse had before
-[itinycheng/flink-connector-clickhouse](https://github.com/itinycheng/flink-connector-clickhouse)
-filled it — a widely-used store, a widely-used streaming engine, and nothing connecting them in
-SQL. This connector is built the same way that one is: a proper dynamic table factory, not a
-one-off `DataStream` job glued together per project.
+either — a widely-used store, a widely-used streaming engine, and nothing connecting them in SQL.
+This connector closes that gap with a proper dynamic table factory, not a one-off `DataStream` job
+glued together per project.
 
 ## Quickstart
 
