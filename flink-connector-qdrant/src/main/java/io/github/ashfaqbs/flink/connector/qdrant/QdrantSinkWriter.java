@@ -2,9 +2,13 @@ package io.github.ashfaqbs.flink.connector.qdrant;
 
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.QdrantGrpcClient;
+import io.qdrant.client.grpc.JsonWithInt.Value;
+import io.qdrant.client.grpc.Points.PointId;
 import io.qdrant.client.grpc.Points.PointStruct;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.table.data.RowData;
@@ -27,14 +31,21 @@ public final class QdrantSinkWriter implements SinkWriter<RowData> {
 
     private final QdrantWriterOptions options;
     private final QdrantRowConverter converter;
+    private final String versionField;
     private final QdrantClient client;
     private final List<PointStruct> buffer;
 
     private long lastFlushMillis;
 
     public QdrantSinkWriter(QdrantWriterOptions options, QdrantRowConverter converter) {
+        this(options, converter, null);
+    }
+
+    public QdrantSinkWriter(
+            QdrantWriterOptions options, QdrantRowConverter converter, String versionField) {
         this.options = options;
         this.converter = converter;
+        this.versionField = versionField;
         this.buffer = new ArrayList<>(options.batchSize());
         this.lastFlushMillis = System.currentTimeMillis();
 
@@ -74,7 +85,7 @@ public final class QdrantSinkWriter implements SinkWriter<RowData> {
             lastFlushMillis = System.currentTimeMillis();
             return;
         }
-        List<PointStruct> batch = new ArrayList<>(buffer);
+        List<PointStruct> batch = dedupeByVersion(buffer);
         buffer.clear();
         lastFlushMillis = System.currentTimeMillis();
 
@@ -108,6 +119,47 @@ public final class QdrantSinkWriter implements SinkWriter<RowData> {
                 backoffBeforeRetry(attempt);
             }
         }
+    }
+
+    /**
+     * If {@code versionField} is configured and the same point ID appears more than once in
+     * {@code pending} (e.g. a retried batch re-buffered alongside newer rows for the same key),
+     * keeps only the row with the highest value for that payload field, so arrival order within
+     * the batch can't let a stale row overwrite a newer one. A row missing the field, or with a
+     * non-numeric value for it, is treated as the oldest possible version. This only orders
+     * duplicates inside one buffered batch -- it cannot order writes across separate batches or
+     * concurrent writers, since Qdrant has no server-side conditional/CAS write.
+     */
+    List<PointStruct> dedupeByVersion(List<PointStruct> pending) {
+        if (versionField == null) {
+            return new ArrayList<>(pending);
+        }
+        Map<PointId, PointStruct> winners = new LinkedHashMap<>();
+        Map<PointId, Double> winnerVersions = new LinkedHashMap<>();
+        for (PointStruct point : pending) {
+            PointId id = point.getId();
+            double version = extractVersion(point);
+            Double existing = winnerVersions.get(id);
+            if (existing == null || version >= existing) {
+                winners.put(id, point);
+                winnerVersions.put(id, version);
+            }
+        }
+        return new ArrayList<>(winners.values());
+    }
+
+    private double extractVersion(PointStruct point) {
+        Value value = point.getPayloadMap().get(versionField);
+        if (value == null) {
+            return Double.NEGATIVE_INFINITY;
+        }
+        if (value.hasIntegerValue()) {
+            return value.getIntegerValue();
+        }
+        if (value.hasDoubleValue()) {
+            return value.getDoubleValue();
+        }
+        return Double.NEGATIVE_INFINITY;
     }
 
     private static void backoffBeforeRetry(int attempt) {
