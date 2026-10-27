@@ -13,13 +13,24 @@ public final class QdrantDynamicTableSink implements DynamicTableSink {
     private final RowType rowType;
     private final String vectorField;
     private final String idField;
+    private final String versionField;
 
     public QdrantDynamicTableSink(
             QdrantWriterOptions writerOptions, RowType rowType, String vectorField, String idField) {
+        this(writerOptions, rowType, vectorField, idField, null);
+    }
+
+    public QdrantDynamicTableSink(
+            QdrantWriterOptions writerOptions,
+            RowType rowType,
+            String vectorField,
+            String idField,
+            String versionField) {
         this.writerOptions = writerOptions;
         this.rowType = rowType;
         this.vectorField = vectorField;
         this.idField = idField;
+        this.versionField = versionField;
     }
 
     @Override
@@ -30,12 +41,12 @@ public final class QdrantDynamicTableSink implements DynamicTableSink {
     @Override
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         QdrantRowConverter converter = new QdrantRowConverter(rowType, vectorField, idField);
-        return SinkV2Provider.of(new QdrantSink(writerOptions, converter));
+        return SinkV2Provider.of(new QdrantSink(writerOptions, converter, versionField));
     }
 
     @Override
     public DynamicTableSink copy() {
-        return new QdrantDynamicTableSink(writerOptions, rowType, vectorField, idField);
+        return new QdrantDynamicTableSink(writerOptions, rowType, vectorField, idField, versionField);
     }
 
     @Override

@@ -54,6 +54,22 @@ public final class QdrantConnectorOptions {
                                     + "string. If unset, a random UUID is generated per row "
                                     + "(upserts will never match an existing point).");
 
+    public static final ConfigOption<String> VERSION_FIELD =
+            ConfigOptions.key("version-field")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Name of a numeric payload column holding a monotonically "
+                                    + "increasing version/timestamp. When set, if the same "
+                                    + "point ID appears more than once in a single buffered "
+                                    + "batch (e.g. after a retry or replay), only the row with "
+                                    + "the highest value for this field is upserted, so an "
+                                    + "older row can't overwrite a newer one within that batch. "
+                                    + "This does not make writes atomic across separate batches "
+                                    + "or concurrent writers -- Qdrant has no server-side "
+                                    + "conditional write, so that ordering still relies on the "
+                                    + "upstream pipeline.");
+
     public static final ConfigOption<Integer> SINK_BATCH_SIZE =
             ConfigOptions.key("sink.batch-size")
                     .intType()

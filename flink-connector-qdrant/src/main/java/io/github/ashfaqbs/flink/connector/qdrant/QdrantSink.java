@@ -12,14 +12,21 @@ public final class QdrantSink implements Sink<RowData> {
 
     private final QdrantWriterOptions options;
     private final QdrantRowConverter converter;
+    private final String versionField;
 
     public QdrantSink(QdrantWriterOptions options, QdrantRowConverter converter) {
+        this(options, converter, null);
+    }
+
+    public QdrantSink(
+            QdrantWriterOptions options, QdrantRowConverter converter, String versionField) {
         this.options = options;
         this.converter = converter;
+        this.versionField = versionField;
     }
 
     @Override
     public SinkWriter<RowData> createWriter(InitContext context) {
-        return new QdrantSinkWriter(options, converter);
+        return new QdrantSinkWriter(options, converter, versionField);
     }
 }

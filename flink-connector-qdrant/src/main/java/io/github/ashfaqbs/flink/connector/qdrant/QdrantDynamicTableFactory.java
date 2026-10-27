@@ -10,6 +10,7 @@ import static io.github.ashfaqbs.flink.connector.qdrant.QdrantConnectorOptions.S
 import static io.github.ashfaqbs.flink.connector.qdrant.QdrantConnectorOptions.SINK_MAX_RETRIES;
 import static io.github.ashfaqbs.flink.connector.qdrant.QdrantConnectorOptions.USE_TLS;
 import static io.github.ashfaqbs.flink.connector.qdrant.QdrantConnectorOptions.VECTOR_FIELD;
+import static io.github.ashfaqbs.flink.connector.qdrant.QdrantConnectorOptions.VERSION_FIELD;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -39,7 +40,11 @@ public final class QdrantDynamicTableFactory implements DynamicTableSinkFactory 
                         .getLogicalType();
         String vectorField = config.get(VECTOR_FIELD);
         String idField = config.get(ID_FIELD);
+        String versionField = config.get(VERSION_FIELD);
         validateVectorField(rowType, vectorField);
+        if (versionField != null) {
+            validateVersionField(rowType, versionField, vectorField, idField);
+        }
 
         QdrantWriterOptions writerOptions =
                 new QdrantWriterOptions(
@@ -52,7 +57,7 @@ public final class QdrantDynamicTableFactory implements DynamicTableSinkFactory 
                         config.get(SINK_FLUSH_INTERVAL_MS),
                         config.get(SINK_MAX_RETRIES));
 
-        return new QdrantDynamicTableSink(writerOptions, rowType, vectorField, idField);
+        return new QdrantDynamicTableSink(writerOptions, rowType, vectorField, idField, versionField);
     }
 
     private static void validateVectorField(RowType rowType, String vectorField) {
@@ -70,6 +75,33 @@ public final class QdrantDynamicTableFactory implements DynamicTableSinkFactory 
                             + "' must be ARRAY<FLOAT>, got "
                             + type
                             + ". Cast the column before the sink if it's ARRAY<DOUBLE>.");
+        }
+    }
+
+    private static void validateVersionField(
+            RowType rowType, String versionField, String vectorField, String idField) {
+        if (versionField.equals(vectorField) || versionField.equals(idField)) {
+            throw new IllegalArgumentException(
+                    "version-field '" + versionField + "' must be a different column than "
+                            + "vector-field/id-field.");
+        }
+        int index = rowType.getFieldNames().indexOf(versionField);
+        if (index < 0) {
+            throw new IllegalArgumentException(
+                    "version-field '" + versionField + "' not found in table schema.");
+        }
+        LogicalTypeRoot root = rowType.getTypeAt(index).getTypeRoot();
+        if (root != LogicalTypeRoot.TINYINT
+                && root != LogicalTypeRoot.SMALLINT
+                && root != LogicalTypeRoot.INTEGER
+                && root != LogicalTypeRoot.BIGINT
+                && root != LogicalTypeRoot.FLOAT
+                && root != LogicalTypeRoot.DOUBLE) {
+            throw new IllegalArgumentException(
+                    "version-field '"
+                            + versionField
+                            + "' must be a numeric column, got "
+                            + rowType.getTypeAt(index));
         }
     }
 
@@ -94,6 +126,7 @@ public final class QdrantDynamicTableFactory implements DynamicTableSinkFactory 
         options.add(USE_TLS);
         options.add(API_KEY);
         options.add(ID_FIELD);
+        options.add(VERSION_FIELD);
         options.add(SINK_BATCH_SIZE);
         options.add(SINK_FLUSH_INTERVAL_MS);
         options.add(SINK_MAX_RETRIES);
