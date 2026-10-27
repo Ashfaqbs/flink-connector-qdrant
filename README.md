@@ -80,6 +80,7 @@ column becomes a Qdrant payload field automatically — no manual mapping needed
 | `collection-name` | yes | — | Must already exist — this connector doesn't create collections |
 | `vector-field` | yes | — | Must be `ARRAY<FLOAT>` |
 | `id-field` | no | — | `STRING` (must contain a UUID), `BIGINT`, or `INTEGER`. If unset, a random UUID is generated per row (every row becomes a new point, never overwrites) |
+| `version-field` | no | — | Numeric payload column (`TINYINT`/`SMALLINT`/`INTEGER`/`BIGINT`/`FLOAT`/`DOUBLE`) holding a monotonically increasing version/timestamp. If the same point ID appears twice in one buffered batch (e.g. a retried batch re-buffered alongside a fresher update for the same key), only the higher-version row is upserted — see [Known limitation: ordering](#known-limitation-ordering) |
 | `sink.batch-size` | no | `64` | Rows buffered before an upsert call |
 | `sink.flush-interval-ms` | no | `1000` | Max time a partial batch is held |
 | `sink.max-retries` | no | `3` | Per-batch upsert retries (exponential backoff) before failing the job |
@@ -98,11 +99,22 @@ silently at runtime.
   without full changelog handling.
 - **Collection must already exist** — this connector doesn't create it for you.
 
+#### Known limitation: ordering
+
+Upsert-by-point-ID makes retries idempotent, but there's no built-in protection against a stale
+write overwriting a newer one for the same point under concurrent writers or replay — plain
+last-write-wins. `version-field` closes one concrete part of that gap: duplicate point IDs *inside
+a single buffered batch* are resolved by version instead of arrival order. It does **not** make
+writes atomic across separate batches, checkpoints, or parallel subtasks — Qdrant has no
+server-side conditional/CAS write, so storing a version number alone can't enforce ordering by
+itself; that still has to come from upstream ordering guarantees (e.g. a keyed, single-writer
+pipeline per point ID) or a future enforced-at-the-server design.
+
 ## Build & test
 
 ```bash
 mvn clean install   # builds both modules
-mvn test             # unit tests only (no Docker needed) — 13/13 passing
+mvn test             # unit tests only (no Docker needed) — 15/15 passing
 mvn verify            # also runs the testcontainers IT against a real qdrant/qdrant container
 ```
 
